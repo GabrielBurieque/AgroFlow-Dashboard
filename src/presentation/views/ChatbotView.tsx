@@ -11,7 +11,6 @@ export function ChatbotView() {
     conversacionActiva,
     seleccionarConversacion,
     metricas,
-    flujo,
     plantillas,
     setPlantillas,
     guardarPlantillas,
