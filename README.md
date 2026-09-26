@@ -72,9 +72,14 @@ presentation  →  application  →  domain  ←  infrastructure
   a través de `composition/container.ts`; no sabe si los datos vienen de un
   mock o de una API real.
 
-## Cómo conectar el backend real más adelante
+## Integración para la demo local
 
-Cuando el backend (y el flujo de n8n) estén listos, los pasos son:
+La integración mínima con AgroFlow API está definida en
+[`docs/LOCAL_DEMO_INTEGRATION.md`](docs/LOCAL_DEMO_INTEGRATION.md). Para el lunes
+se conserva React/Vite y se conecta únicamente el flujo de turnos; autenticación,
+CRUD de datos maestros, interrupciones, mapa, reportes y despliegue quedan fuera.
+
+Cuando el backend local esté listo, los pasos son:
 
 1. Crear `src/infrastructure/http/HttpTurnoRepository.ts` (y equivalentes para
    transportistas, conversaciones, reportes y configuración) implementando las
