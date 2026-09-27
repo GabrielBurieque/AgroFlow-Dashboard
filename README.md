@@ -79,22 +79,35 @@ La integración mínima con AgroFlow API está definida en
 se conserva React/Vite y se conecta únicamente el flujo de turnos; autenticación,
 CRUD de datos maestros, interrupciones, mapa, reportes y despliegue quedan fuera.
 
-Cuando el backend local esté listo, los pasos son:
+### Configuración
 
-1. Crear `src/infrastructure/http/HttpTurnoRepository.ts` (y equivalentes para
-   transportistas, conversaciones, reportes y configuración) implementando las
-   mismas interfaces de `src/domain/repositories/`, pero haciendo `fetch`
-   contra los endpoints reales.
-2. En `src/composition/container.ts`, reemplazar:
-   ```ts
-   const turnoRepository = new MockTurnoRepository();
-   ```
-   por:
-   ```ts
-   const turnoRepository = new HttpTurnoRepository(import.meta.env.VITE_API_URL);
-   ```
-3. Nada más cambia: los casos de uso, los hooks y las vistas siguen funcionando
-   igual, porque nunca dependieron de la implementación mock.
+Copiar `.env.example` como `.env` y elegir la fuente de datos:
+
+```env
+VITE_DATA_SOURCE=http          # mock = respaldo en memoria, sin backend
+VITE_API_URL=http://localhost:5000
+```
+
+Reiniciar `npm run dev` después de cambiar el `.env`.
+
+### Qué consume de la API (`VITE_DATA_SOURCE=http`)
+
+`src/infrastructure/http/repositories/HttpTurnoRepository.ts` implementa el
+puerto `TurnoRepository` contra `docs/contracts/openapi.yaml` del repositorio
+AgroFlow:
+
+| Acción del dashboard | Operación |
+|---|---|
+| Alta manual (teléfono, patente, código de finca, corte, carga) | `POST /api/v1/appointments` |
+| Cola, filtros de estado/fecha/patente/teléfono y polling cada 4 s | `GET /api/v1/appointments` |
+| Detalle (clic en una fila) | `GET /api/v1/appointments/{id}` |
+| Avanzar / Cancelar | `POST /api/v1/appointments/{id}/transitions` |
+
+El dashboard no calcula prioridad, ventana ni capacidad. Ante un error
+(`400`, `404`, `409`, `500` o sin conexión) muestra el mensaje y recarga el
+estado vigente. Panel general (métricas, timeline, molienda), chatbot,
+transportistas, reportes y configuración siguen en mock y se identifican como
+datos de demostración.
 
 ## Convenciones de la UI
 

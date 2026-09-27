@@ -390,6 +390,37 @@ tbody tr:hover {
 .estado.completado i {
   background: #6ab64e;
 }
+.estado.ingresado i {
+  background: #3f8f24;
+}
+.estado.cancelado i {
+  background: #6b6b6b;
+}
+.fila-seleccionable {
+  cursor: pointer;
+}
+.fila-seleccionable.activa td {
+  background: rgba(106, 182, 78, 0.08);
+}
+.detalle-turno dl {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: 6px 16px;
+  margin: 10px 0 14px;
+  font-size: 13px;
+}
+.detalle-turno dt {
+  color: var(--tinta-suave);
+}
+.detalle-turno dd {
+  margin: 0;
+}
+.fuente-demo {
+  font-size: 11px;
+  color: var(--tinta-suave);
+  font-weight: 400;
+  margin-left: 8px;
+}
 .espera-alta {
   color: var(--alerta);
   font-weight: 600;

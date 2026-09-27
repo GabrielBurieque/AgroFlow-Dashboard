@@ -1,19 +1,31 @@
 import { useState } from "react";
+import { container } from "../../composition/container";
 import { useColaTurnos } from "../hooks/useColaTurnos";
 import { MetricCard } from "../components/common/MetricCard";
 import { CanalBadge, EstadoBadge, FlotaBadge, PrioridadBadge } from "../components/common/Badges";
 import { EmptyState, ErrorState, LoadingState } from "../components/common/StatusStates";
-import { calcularPrioridadCorte, type FlotaTipo } from "../../domain/entities/Turno";
+import type { Turno } from "../../domain/entities/Turno";
 
 const ESTADO_OPCIONES: { value: string; label: string }[] = [
   { value: "todos", label: "Todos los estados" },
-  { value: "pendiente", label: "Pendiente" },
-  { value: "viaje", label: "En viaje" },
-  { value: "cancha", label: "En canchón" },
-  { value: "descargando", label: "Descargando" },
-  { value: "completado", label: "Completado" },
-  { value: "demorado", label: "Demorado" },
+  { value: "pendiente", label: "Asignado" },
+  { value: "viaje", label: "En camino" },
+  { value: "cancha", label: "En espera" },
+  { value: "ingresado", label: "Ingresado" },
+  { value: "descargando", label: "En descarga" },
+  { value: "completado", label: "Finalizado" },
+  { value: "cancelado", label: "Cancelado" },
 ];
+
+const esApi = container.fuenteDatos === "http";
+
+const FORM_VACIO = { telefono: "", patente: "", codigoFinca: "", corteEn: "", cargaTon: "" };
+
+const fechaHora = (iso?: string) =>
+  iso ? new Date(iso).toLocaleString("es-AR", { dateStyle: "short", timeStyle: "short" }) : "—";
+
+/** Estados en los que ya no hay acciones posibles (terminales). */
+const esTerminal = (t: Turno) => t.estado === "completado" || t.estado === "cancelado";
 
 export function ColaTurnosView() {
   const {
@@ -21,26 +33,31 @@ export function ColaTurnosView() {
     resumen,
     cargando,
     error,
+    errorAccion,
+    limpiarErrorAccion,
+    enCurso,
     filtros,
     setBusqueda,
     setFiltroFlota,
     setFiltroEstado,
     setOrden,
+    setFecha,
+    setPatente,
+    setTelefono,
+    detalleId,
+    detalle,
+    abrirDetalle,
+    cerrarDetalle,
     crearTurno,
-    reasignar,
+    avanzar,
     cancelar,
+    reasignar,
   } = useColaTurnos();
 
   const [mostrarForm, setMostrarForm] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
-  const [form, setForm] = useState({
-    patente: "",
-    chofer: "",
-    finca: "",
-    flota: "propia" as FlotaTipo,
-    hora: "",
-    horasDesdeCorte: "",
-  });
+  const [guardando, setGuardando] = useState(false);
+  const [form, setForm] = useState(FORM_VACIO);
 
   const actualizarCampo = (campo: keyof typeof form, valor: string) => {
     setForm((prev) => ({ ...prev, [campo]: valor }));
@@ -48,19 +65,22 @@ export function ColaTurnosView() {
 
   const guardarTurno = async () => {
     setFormError(null);
+    setGuardando(true);
     try {
       await crearTurno({
+        telefono: form.telefono,
         patente: form.patente,
-        chofer: form.chofer,
-        finca: form.finca,
-        flota: form.flota,
-        hora: form.hora,
-        horasDesdeCorte: Number(form.horasDesdeCorte) || 0,
+        codigoFinca: form.codigoFinca,
+        // datetime-local no trae zona horaria; toISOString la vuelve explícita.
+        corteEn: form.corteEn ? new Date(form.corteEn).toISOString() : "",
+        cargaTon: Number(form.cargaTon) || 0,
       });
-      setForm({ patente: "", chofer: "", finca: "", flota: "propia", hora: "", horasDesdeCorte: "" });
+      setForm(FORM_VACIO);
       setMostrarForm(false);
     } catch (e) {
       setFormError(e instanceof Error ? e.message : "No se pudo crear el turno.");
+    } finally {
+      setGuardando(false);
     }
   };
 
@@ -69,14 +89,34 @@ export function ColaTurnosView() {
     if (nuevaHora) reasignar(id, nuevaHora);
   };
 
-  if (error) return <ErrorState message={error} />;
+  const handleCancelar = (t: Turno) => {
+    if (window.confirm(`¿Cancelar el turno de ${t.patente}?`)) cancelar(t.id);
+  };
+
+  const acciones = (t: Turno) => (
+    <div className="row-actions">
+      <button className="btn-mini" disabled={enCurso === t.id || esTerminal(t)} onClick={() => avanzar(t.id)}>
+        Avanzar
+      </button>
+      <button className="btn-mini" disabled={enCurso === t.id || esTerminal(t)} onClick={() => handleCancelar(t)}>
+        Cancelar
+      </button>
+      {!esApi && (
+        <button className="btn-mini" disabled={enCurso === t.id} onClick={() => handleReasignar(t.id, t.hora)}>
+          Reasignar
+        </button>
+      )}
+    </div>
+  );
 
   return (
     <div className="view">
       <div className="topbar">
         <div>
           <h1>Cola de turnos</h1>
-          <div className="zafra">Todos los turnos programados hoy · Ingenio San Ramón</div>
+          <div className="zafra">
+            Turnos programados · {esApi ? `AgroFlow API (${container.apiUrl})` : "datos mock"}
+          </div>
         </div>
         <button className="btn-primary" onClick={() => setMostrarForm((v) => !v)}>
           + Nuevo turno
@@ -84,50 +124,85 @@ export function ColaTurnosView() {
       </div>
 
       <div className="metrics" style={{ marginBottom: 20 }}>
-        <MetricCard label="Turnos hoy" value={resumen.total} />
-        <MetricCard label="Pendientes" value={resumen.pendientes} />
-        <MetricCard label="Completados" value={resumen.completados} />
-        <MetricCard label="Demorados" value={resumen.demorados} valueColor="var(--alerta)" />
+        <MetricCard label="Turnos" value={resumen.total} />
+        <MetricCard label="Asignados" value={resumen.pendientes} />
+        <MetricCard label="Finalizados" value={resumen.completados} />
+        <MetricCard label="Cancelados" value={resumen.cancelados} />
       </div>
 
       {mostrarForm && (
         <div className="alert-card" style={{ marginBottom: 22, maxWidth: 640 }}>
           <h3>Cargar turno manual</h3>
-          <p>Para transportistas sin acceso a WhatsApp o casos excepcionales.</p>
+          <p>La API asigna la primera ventana futura con cupo. Usá datos existentes en el seed.</p>
           {formError && <ErrorState message={formError} />}
           <div className="form-grid">
             <div className="form-field">
+              <label>Teléfono del transportista</label>
+              <input value={form.telefono} onChange={(e) => actualizarCampo("telefono", e.target.value)} placeholder="+5493815550101" />
+            </div>
+            <div className="form-field">
               <label>Patente</label>
-              <input value={form.patente} onChange={(e) => actualizarCampo("patente", e.target.value)} placeholder="AB123CD" />
+              <input value={form.patente} onChange={(e) => actualizarCampo("patente", e.target.value)} placeholder="AF123BC" />
             </div>
             <div className="form-field">
-              <label>Transportista</label>
-              <input value={form.chofer} onChange={(e) => actualizarCampo("chofer", e.target.value)} placeholder="Nombre y apellido" />
+              <label>Código de finca</label>
+              <input value={form.codigoFinca} onChange={(e) => actualizarCampo("codigoFinca", e.target.value)} placeholder="FINCA-NORTE" />
             </div>
             <div className="form-field">
-              <label>Finca / Origen</label>
-              <input value={form.finca} onChange={(e) => actualizarCampo("finca", e.target.value)} placeholder="Finca La Esperanza" />
+              <label>Momento de corte</label>
+              <input type="datetime-local" value={form.corteEn} onChange={(e) => actualizarCampo("corteEn", e.target.value)} />
             </div>
             <div className="form-field">
-              <label>Flota</label>
-              <select value={form.flota} onChange={(e) => actualizarCampo("flota", e.target.value)}>
-                <option value="propia">Propia</option>
-                <option value="tercero">Tercerizada</option>
-              </select>
-            </div>
-            <div className="form-field">
-              <label>Hora del turno</label>
-              <input type="time" value={form.hora} onChange={(e) => actualizarCampo("hora", e.target.value)} />
-            </div>
-            <div className="form-field">
-              <label>Horas desde el corte</label>
-              <input type="number" min={0} value={form.horasDesdeCorte} onChange={(e) => actualizarCampo("horasDesdeCorte", e.target.value)} placeholder="12" />
+              <label>Carga estimada (tn)</label>
+              <input type="number" min={0} step="0.1" value={form.cargaTon} onChange={(e) => actualizarCampo("cargaTon", e.target.value)} placeholder="28.5" />
             </div>
           </div>
           <div style={{ display: "flex", gap: 10, marginTop: 6 }}>
-            <button className="btn-primary" onClick={guardarTurno}>Guardar turno</button>
+            <button className="btn-primary" disabled={guardando} onClick={guardarTurno}>
+              {guardando ? "Guardando..." : "Guardar turno"}
+            </button>
             <button className="btn-mini" onClick={() => setMostrarForm(false)}>Cancelar</button>
           </div>
+        </div>
+      )}
+
+      {errorAccion && (
+        <div onClick={limpiarErrorAccion} style={{ cursor: "pointer", marginBottom: 12 }} title="Cerrar">
+          <ErrorState message={errorAccion} />
+        </div>
+      )}
+
+      {detalleId && (
+        <div className="alert-card detalle-turno" style={{ marginBottom: 22, maxWidth: 640 }}>
+          <h3>Detalle del turno</h3>
+          {!detalle ? (
+            <LoadingState label="Cargando detalle..." />
+          ) : (
+            <>
+              <dl>
+                <dt>Estado</dt>
+                <dd><EstadoBadge estado={detalle.estado} /></dd>
+                <dt>Ventana</dt>
+                <dd>{detalle.hora}{detalle.ventanaFin ? ` – ${detalle.ventanaFin}` : ""}</dd>
+                <dt>Patente</dt>
+                <dd>{detalle.patente}</dd>
+                <dt>Transportista</dt>
+                <dd>{detalle.chofer}</dd>
+                <dt>Finca</dt>
+                <dd>{detalle.finca}</dd>
+                <dt>Corte</dt>
+                <dd>{fechaHora(detalle.corteEn)} ({detalle.horasDesdeCorte} h)</dd>
+                <dt>Carga estimada</dt>
+                <dd>{detalle.cargaTon !== undefined ? `${detalle.cargaTon} tn` : "—"}</dd>
+                <dt>Creado</dt>
+                <dd>{fechaHora(detalle.creadoEn)}</dd>
+              </dl>
+              <div style={{ display: "flex", gap: 10 }}>
+                {acciones(detalle)}
+                <button className="btn-mini" onClick={cerrarDetalle}>Cerrar</button>
+              </div>
+            </>
+          )}
         </div>
       )}
 
@@ -138,22 +213,34 @@ export function ColaTurnosView() {
           value={filtros.busqueda}
           onChange={(e) => setBusqueda(e.target.value)}
         />
-        <select value={filtros.filtroFlota} onChange={(e) => setFiltroFlota(e.target.value as any)}>
-          <option value="todas">Toda la flota</option>
-          <option value="propia">Propia</option>
-          <option value="tercero">Tercerizada</option>
-        </select>
-        <select value={filtros.filtroEstado} onChange={(e) => setFiltroEstado(e.target.value as any)}>
+        <select value={filtros.filtroEstado} onChange={(e) => setFiltroEstado(e.target.value as typeof filtros.filtroEstado)}>
           {ESTADO_OPCIONES.map((o) => (
             <option key={o.value} value={o.value}>{o.label}</option>
           ))}
         </select>
-        <select value={filtros.orden} onChange={(e) => setOrden(e.target.value as any)}>
-          <option value="turno">Ordenar por turno</option>
-          <option value="prioridad">Ordenar por prioridad de corte</option>
-          <option value="espera">Ordenar por espera</option>
-        </select>
+        {esApi ? (
+          <>
+            <input type="date" value={filtros.fecha} onChange={(e) => setFecha(e.target.value)} title="Fecha de la ventana (vacío = hoy)" />
+            <input type="text" placeholder="Patente exacta" value={filtros.patente} onChange={(e) => setPatente(e.target.value)} />
+            <input type="text" placeholder="Teléfono +549..." value={filtros.telefono} onChange={(e) => setTelefono(e.target.value)} />
+          </>
+        ) : (
+          <>
+            <select value={filtros.filtroFlota} onChange={(e) => setFiltroFlota(e.target.value as typeof filtros.filtroFlota)}>
+              <option value="todas">Toda la flota</option>
+              <option value="propia">Propia</option>
+              <option value="tercero">Tercerizada</option>
+            </select>
+            <select value={filtros.orden} onChange={(e) => setOrden(e.target.value as typeof filtros.orden)}>
+              <option value="turno">Ordenar por turno</option>
+              <option value="prioridad">Ordenar por prioridad de corte</option>
+              <option value="espera">Ordenar por espera</option>
+            </select>
+          </>
+        )}
       </div>
+
+      {error && <ErrorState message={error} />}
 
       {cargando ? (
         <LoadingState label="Cargando turnos..." />
@@ -162,36 +249,39 @@ export function ColaTurnosView() {
           <table>
             <thead>
               <tr>
-                <th>Turno</th>
+                <th>Ventana</th>
                 <th>Patente</th>
                 <th>Transportista</th>
                 <th>Finca / Origen</th>
-                <th>Flota</th>
+                {esApi ? <th>Carga</th> : <th>Flota</th>}
                 <th>Corte</th>
-                <th>Prioridad</th>
+                {!esApi && <th>Prioridad</th>}
                 <th>Estado</th>
-                <th>Canal</th>
+                {!esApi && <th>Canal</th>}
                 <th></th>
               </tr>
             </thead>
             <tbody>
               {turnos.map((t) => (
-                <tr key={t.id}>
+                <tr
+                  key={t.id}
+                  className={`fila-seleccionable ${t.id === detalleId ? "activa" : ""}`}
+                  onClick={() => abrirDetalle(t.id)}
+                >
                   <td style={{ fontFamily: "'IBM Plex Mono',monospace", fontSize: 12.5 }}>{t.hora}</td>
                   <td style={{ fontFamily: "'IBM Plex Mono',monospace" }}>{t.patente}</td>
                   <td>{t.chofer}</td>
                   <td>{t.finca}</td>
-                  <td><FlotaBadge flota={t.flota} /></td>
+                  {esApi ? (
+                    <td style={{ fontSize: 12.5 }}>{t.cargaTon !== undefined ? `${t.cargaTon} tn` : "—"}</td>
+                  ) : (
+                    <td><FlotaBadge flota={t.flota} /></td>
+                  )}
                   <td style={{ fontSize: 12.5 }}>{t.horasDesdeCorte} h</td>
-                  <td><PrioridadBadge prioridad={calcularPrioridadCorte(t.horasDesdeCorte)} /></td>
+                  {!esApi && <td><PrioridadBadge prioridad={t.prioridad} /></td>}
                   <td><EstadoBadge estado={t.estado} /></td>
-                  <td><CanalBadge canal={t.canal} /></td>
-                  <td>
-                    <div className="row-actions">
-                      <button className="btn-mini" onClick={() => handleReasignar(t.id, t.hora)}>Reasignar</button>
-                      <button className="btn-mini" onClick={() => cancelar(t.id)}>Cancelar</button>
-                    </div>
-                  </td>
+                  {!esApi && <td><CanalBadge canal={t.canal} /></td>}
+                  <td onClick={(e) => e.stopPropagation()}>{acciones(t)}</td>
                 </tr>
               ))}
             </tbody>
