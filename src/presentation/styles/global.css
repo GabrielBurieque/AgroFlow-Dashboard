@@ -98,6 +98,9 @@ nav {
   background: var(--cana-700);
   color: var(--tinta);
 }
+.nav-item.sin-datos:not(.active) {
+  opacity: 0.5;
+}
 .nav-item .dot {
   width: 6px;
   height: 6px;
@@ -823,6 +826,26 @@ tbody tr:hover {
   gap: 12px;
   max-height: 440px;
   overflow-y: auto;
+}
+.conv-more {
+  padding: 10px 14px;
+  text-align: center;
+}
+.conv-empty,
+.chat-aviso {
+  padding: 12px 14px;
+  font-size: 12px;
+  color: var(--tinta-suave);
+}
+.chat-aviso.error {
+  color: var(--alerta);
+}
+.chat-anteriores {
+  align-self: center;
+}
+.msg .envio {
+  font-style: normal;
+  color: var(--alerta);
 }
 
 .flow-steps {

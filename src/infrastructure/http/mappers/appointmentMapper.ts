@@ -5,6 +5,7 @@ import type {
   AppointmentSummaryDto,
   CreateAppointmentRequestDto,
 } from "../dto/AppointmentDto";
+import { horaDeIso } from "../../../shared/utils/date";
 
 /** Tabla de docs/LOCAL_DEMO_INTEGRATION.md, con EN_ESPERA e INGRESADO separados. */
 const ESTADO_MAP: Record<AppointmentStatusDto, EstadoTurno> = {
@@ -17,16 +18,10 @@ const ESTADO_MAP: Record<AppointmentStatusDto, EstadoTurno> = {
   CANCELADO: "cancelado",
 };
 
-// "demorado" no existe en la API: no tiene equivalente para filtrar.
 const ESTADO_INVERSO: Partial<Record<EstadoTurno, AppointmentStatusDto>> = Object.fromEntries(
   Object.entries(ESTADO_MAP).map(([api, dominio]) => [dominio, api])
 );
 
-/** "2026-09-28T05:30:00-03:00" → "05:30" en la hora local del navegador. */
-function horaDeIso(iso: string): string {
-  const d = new Date(iso);
-  return `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
-}
 
 export function mapAppointment(dto: AppointmentDto): Turno {
   return {
@@ -43,11 +38,6 @@ export function mapAppointment(dto: AppointmentDto): Turno {
     corteEn: dto.cutAt,
     cargaTon: dto.estimatedLoadTons,
     creadoEn: dto.createdAt,
-    // La API de la demo no informa estos datos y el dashboard no los calcula.
-    flota: null,
-    canal: null,
-    esperaMin: null,
-    prioridad: null,
   };
 }
 

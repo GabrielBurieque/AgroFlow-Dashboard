@@ -1,9 +1,3 @@
-export function horaConOffset(offsetMin: number): string {
-  const d = new Date();
-  d.setMinutes(d.getMinutes() + offsetMin);
-  return d.toTimeString().slice(0, 5);
-}
-
 export function horaActual(): string {
   return new Date().toTimeString().slice(0, 8);
 }
@@ -16,6 +10,8 @@ export function fechaLarga(): string {
   });
 }
 
-export function generarId(prefijo: string): string {
-  return `${prefijo}-${Date.now()}-${Math.floor(Math.random() * 10000)}`;
+/** "2026-09-16T14:30:00Z" → "14:30" en la hora local del navegador. */
+export function horaDeIso(iso: string): string {
+  const d = new Date(iso);
+  return `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
 }

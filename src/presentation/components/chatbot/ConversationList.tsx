@@ -1,20 +1,25 @@
 import type { Conversacion } from "../../../domain/entities/Conversacion";
 
-const TAG_LABEL: Record<Conversacion["estado"], string> = {
-  resuelto: "Resuelto",
-  bot: "Con el bot",
-  escalado: "Escalado",
-};
-
 interface ConversationListProps {
   conversaciones: Conversacion[];
   activaId: string | null;
   onSeleccionar: (id: string) => void;
+  hayMas: boolean;
+  cargandoMas: boolean;
+  onCargarMas: () => void;
 }
 
-export function ConversationList({ conversaciones, activaId, onSeleccionar }: ConversationListProps) {
+export function ConversationList({
+  conversaciones,
+  activaId,
+  onSeleccionar,
+  hayMas,
+  cargandoMas,
+  onCargarMas,
+}: ConversationListProps) {
   return (
     <div className="conv-list">
+      {conversaciones.length === 0 && <div className="conv-empty">Todavía no hay conversaciones.</div>}
       {conversaciones.map((c) => (
         <div
           key={c.id}
@@ -26,9 +31,15 @@ export function ConversationList({ conversaciones, activaId, onSeleccionar }: Co
             <span className="conv-time">{c.hora}</span>
           </div>
           <div className="conv-prev">{c.preview}</div>
-          <span className={`conv-tag ${c.estado}`}>{TAG_LABEL[c.estado]}</span>
         </div>
       ))}
+      {hayMas && (
+        <div className="conv-more">
+          <button className="btn-mini" onClick={onCargarMas} disabled={cargandoMas}>
+            {cargandoMas ? "Cargando..." : "Cargar más conversaciones"}
+          </button>
+        </div>
+      )}
     </div>
   );
 }

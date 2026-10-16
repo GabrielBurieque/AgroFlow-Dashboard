@@ -1,27 +1,53 @@
-import type { Conversacion } from "../../../domain/entities/Conversacion";
+import type { Conversacion, EstadoEnvio } from "../../../domain/entities/Conversacion";
+import type { HiloMensajes } from "../../hooks/useChatbot";
 
-const META_LABEL: Record<Conversacion["estado"], string> = {
-  resuelto: "Resuelto",
-  bot: "Gestionado por el bot",
-  escalado: "Escalado a un operador",
+/**
+ * "aceptado" no lleva etiqueta: es el caso normal y mostrar "entregado"
+ * sería afirmar algo que el proveedor no confirmó.
+ */
+const ENVIO_LABEL: Partial<Record<EstadoEnvio, string>> = {
+  pendiente: "envío pendiente",
+  fallido: "no se pudo enviar",
+  incierto: "envío sin confirmar",
 };
 
-export function ChatTranscript({ conversacion }: { conversacion: Conversacion | null }) {
+interface ChatTranscriptProps {
+  conversacion: Conversacion | null;
+  hilo: HiloMensajes;
+  onCargarAnteriores: () => void;
+}
+
+export function ChatTranscript({ conversacion, hilo, onCargarAnteriores }: ChatTranscriptProps) {
+  const meta = conversacion ? `Último mensaje ${conversacion.hora}` : "Seleccioná una conversación";
+
   return (
     <div className="chat-transcript">
       <div className="chat-transcript-head">
         <strong>{conversacion?.nombre ?? "—"}</strong>
-        <span>
-          {conversacion ? `Hoy · ${conversacion.hora} · ${META_LABEL[conversacion.estado]}` : "Seleccioná una conversación"}
-        </span>
+        <span>{meta}</span>
       </div>
       <div className="chat-transcript-body">
-        {conversacion?.mensajes.map((m, i) => (
-          <div className={`msg ${m.autor === "transportista" ? "in" : "out"}`} key={i}>
-            <span className="who">{m.autor === "transportista" ? "Transportista" : "Bot AgroFlow"}</span>
-            {m.texto}
-          </div>
-        ))}
+        {conversacion && hilo.cursorAnteriores && (
+          <button className="btn-mini chat-anteriores" onClick={onCargarAnteriores} disabled={hilo.cargando}>
+            {hilo.cargando ? "Cargando..." : "Ver mensajes anteriores"}
+          </button>
+        )}
+        {conversacion && hilo.cargando && hilo.mensajes.length === 0 && (
+          <div className="chat-aviso">Cargando mensajes...</div>
+        )}
+        {hilo.error && <div className="chat-aviso error">{hilo.error}</div>}
+        {hilo.mensajes.map((m) => {
+          const envio = m.estadoEnvio && ENVIO_LABEL[m.estadoEnvio];
+          return (
+            <div className={`msg ${m.autor === "transportista" ? "in" : "out"}`} key={m.id}>
+              <span className="who">
+                {m.autor === "transportista" ? "Transportista" : "Bot AgroFlow"} · {m.hora}
+                {envio && <em className={`envio ${m.estadoEnvio}`}> · {envio}</em>}
+              </span>
+              {m.texto}
+            </div>
+          );
+        })}
       </div>
     </div>
   );
