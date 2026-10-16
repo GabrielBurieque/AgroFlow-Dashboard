@@ -42,11 +42,17 @@ Copiar `.env.example` como `.env` (o `.env.local`):
 
 ```env
 VITE_API_URL=http://localhost:5000
+
+# Opcional: historial de conversaciones (endpoints propuestos, ver más abajo)
+# VITE_CONVERSATIONS_SOURCE=http
+# VITE_CONVERSATIONS_API_URL=http://localhost:5000
 ```
 
 | Variable | Uso |
 |---|---|
 | `VITE_API_URL` | URL de AgroFlow API vista desde el navegador. Por defecto `http://localhost:5000`. |
+| `VITE_CONVERSATIONS_SOURCE` | `http` habilita la sección Chatbot contra los endpoints propuestos. Sin ella, la sección aparece como no disponible. |
+| `VITE_CONVERSATIONS_API_URL` | Opcional. URL del historial si no es la misma que `VITE_API_URL`. |
 
 Reiniciar `npm run dev` después de cambiar el `.env`.
 
@@ -73,29 +79,44 @@ estado vigente.
 |---|---|
 | Panel general | Turnos de la API: contadores del día y camiones en curso. |
 | Cola de turnos | Turnos de la API. |
-| Chatbot WhatsApp, Transportistas, Reportes, Configuración | No disponibles: `openapi.yaml` no tiene endpoints para estos datos. Aparecen atenuadas en el menú. |
+| Chatbot WhatsApp | No disponible, salvo con `VITE_CONVERSATIONS_SOURCE=http`. |
+| Transportistas, Reportes, Configuración | No disponibles: `openapi.yaml` no tiene endpoints para estos datos. Aparecen atenuadas en el menú. |
 
 Cuando el contrato incorpore una de estas capacidades, se agrega su repositorio
 HTTP en `infrastructure/http/`, se conecta en `composition/container.ts` y se
 reemplaza la vista "no disponible".
+
+### Historial de conversaciones (propuesta, no contrato)
+
+`HttpConversacionRepository` sigue los endpoints **propuestos** en
+[AgroFlow#88](https://github.com/agustinvallante/AgroFlow/pull/88), que todavía
+no existen en `openapi.yaml`:
+
+- `GET /api/v1/conversations?cursor=…&limit=…`
+- `GET /api/v1/conversations/{id}/events?cursor=…&limit=…`
+
+Los supuestos sobre forma de las páginas y orden están documentados en
+`src/infrastructure/http/dto/ConversationDto.ts`. Si el contrato aprobado
+difiere, solo cambian ese archivo y `mappers/conversationMapper.ts`.
 
 ## Estructura de carpetas (Clean Architecture)
 
 ```
 src/
 ├── domain/                  → Entidades y contratos (puertos). No depende de nada.
-│   ├── entities/             Turno
-│   └── repositories/         Interfaces: TurnoRepository
+│   ├── entities/             Turno, Conversacion, Pagina
+│   └── repositories/         Interfaces: TurnoRepository, ConversacionRepository
 │
 ├── application/              → Casos de uso. Orquestan usando los puertos.
-│   └── usecases/              ObtenerTurnosDelDia, CrearTurnoManual, AvanzarEstadoTurno, etc.
+│   └── usecases/              ObtenerTurnosDelDia, CrearTurnoManual, AvanzarEstadoTurno,
+│                               ObtenerConversaciones, ObtenerMensajesConversacion, etc.
 │
 ├── infrastructure/
 │   └── http/                  Implementaciones contra AgroFlow API.
 │       ├── ApiClient.ts         URL base y traducción de errores (problem+json)
-│       ├── dto/                 Formas de la API (AppointmentDto)
+│       ├── dto/                 Formas de la API (AppointmentDto, ConversationDto)
 │       ├── mappers/             DTO ↔ entidades de dominio
-│       └── repositories/        HttpTurnoRepository
+│       └── repositories/        HttpTurnoRepository, HttpConversacionRepository
 │
 ├── composition/
 │   └── container.ts           Raíz de composición: ÚNICO archivo que decide qué
@@ -104,8 +125,8 @@ src/
 ├── presentation/               → React. Todo lo visual.
 │   ├── layout/                 Sidebar, definición de vistas
 │   ├── views/                  Una por sección del menú
-│   ├── components/             Piezas reutilizables (badges, estados, etc)
-│   ├── hooks/                  useColaTurnos, useClock
+│   ├── components/             Piezas reutilizables (badges, estados, chat, etc)
+│   ├── hooks/                  useColaTurnos, useChatbot, useClock
 │   └── styles/                 Tokens de diseño (variables CSS) y hoja global
 │
 └── shared/

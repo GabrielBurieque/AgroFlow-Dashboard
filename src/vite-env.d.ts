@@ -6,6 +6,8 @@
  */
 interface ImportMetaEnv {
   readonly VITE_API_URL?: string;
+  readonly VITE_CONVERSATIONS_SOURCE?: "http";
+  readonly VITE_CONVERSATIONS_API_URL?: string;
 }
 
 interface ImportMeta {

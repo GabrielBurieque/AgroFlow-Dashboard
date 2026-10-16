@@ -6,7 +6,7 @@ import { container } from "../../composition/container";
 const CON_DATOS: Record<VistaId, boolean> = {
   general: true,
   cola: true,
-  chatbot: false,
+  chatbot: container.conversaciones !== null,
   transportistas: false,
   reportes: false,
   config: false,
@@ -43,6 +43,12 @@ export function Sidebar({ vistaActiva, onCambiarVista }: SidebarProps) {
 
       <div className="sidebar-foot">
         AgroFlow API · {container.apiUrl}
+        {container.conversaciones && (
+          <>
+            <br />
+            Conversaciones: endpoints propuestos · {container.conversacionesApiUrl}
+          </>
+        )}
       </div>
     </aside>
   );
