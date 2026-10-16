@@ -1,14 +1,12 @@
-import type {
-  Conversacion,
-  MetricasChatbot,
-  PasoFlujoBot,
-  PlantillaMensaje,
-} from "../entities/Conversacion";
+import type { Conversacion, MensajeChat } from "../entities/Conversacion";
+import type { Pagina } from "../entities/Pagina";
 
 export interface ConversacionRepository {
-  obtenerConversaciones(): Promise<Conversacion[]>;
-  obtenerMetricasChatbot(): Promise<MetricasChatbot>;
-  obtenerFlujoDeAutomatizacion(): Promise<PasoFlujoBot[]>;
-  obtenerPlantillas(): Promise<PlantillaMensaje[]>;
-  guardarPlantillas(plantillas: PlantillaMensaje[]): Promise<void>;
+  /** Conversaciones de la más reciente a la más antigua. */
+  obtenerConversaciones(cursor?: string): Promise<Pagina<Conversacion>>;
+  /**
+   * Mensajes en orden cronológico. Sin cursor trae los más recientes;
+   * siguienteCursor apunta a los ANTERIORES.
+   */
+  obtenerMensajes(conversacionId: string, cursor?: string): Promise<Pagina<MensajeChat>>;
 }

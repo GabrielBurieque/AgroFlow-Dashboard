@@ -1,12 +1,29 @@
+# Frontend de AgroFlow
+
+Aplicación web de AgroFlow, incorporada desde el prototipo
+[AgroFlow-Dashboard](https://github.com/GabrielBurieque/AgroFlow-Dashboard).
+
+Antes de implementar una pantalla o flujo, consultar:
+
+- [especificaciones vigentes](../openspec/specs/);
+- [documentación específica del frontend](../docs/frontend/README.md);
+- [contratos compartidos](../docs/contracts/README.md);
+- [catálogo de casos de uso](../docs/product/use-case-catalog.md).
+
+El frontend no debe recrear reglas de asignación, prioridad o transiciones de
+estado. Esas decisiones pertenecen al backend y deben consumirse mediante
+contratos explícitos.
+
+---
+
 # AgroFlow — Panel del Ingenio (frontend)
 
-Prototipo de frontend para el panel de administración de AgroFlow, construido
-con **React + TypeScript + Vite** y organizado en **Clean Architecture**.
+Panel de administración de AgroFlow, construido con **React + TypeScript +
+Vite** y organizado en **Clean Architecture**.
 
-Actualmente funciona **sin conexión a un backend real**: toda la información
-(turnos, transportistas, conversaciones del chatbot, reportes, configuración)
-vive en repositorios "mock" en memoria, con latencia simulada, para que la UI
-se comporte igual que el día en que exista una API real detrás.
+El dashboard muestra **únicamente datos de AgroFlow API**. No hay repositorios
+mock ni datos de ejemplo: si la API no expone algo, la pantalla lo dice en vez
+de inventarlo.
 
 ## Cómo correrlo
 
@@ -17,44 +34,103 @@ npm run build     # build de producción (queda en dist/)
 npm run preview   # sirve el build de producción localmente
 ```
 
+Necesita AgroFlow API corriendo (ver [Configuración](#configuración)).
+
+## Configuración
+
+Copiar `.env.example` como `.env` (o `.env.local`):
+
+```env
+VITE_API_URL=http://localhost:5000
+
+# Opcional: historial de conversaciones (endpoints propuestos, ver más abajo)
+# VITE_CONVERSATIONS_SOURCE=http
+# VITE_CONVERSATIONS_API_URL=http://localhost:5000
+```
+
+| Variable | Uso |
+|---|---|
+| `VITE_API_URL` | URL de AgroFlow API vista desde el navegador. Por defecto `http://localhost:5000`. |
+| `VITE_CONVERSATIONS_SOURCE` | `http` habilita la sección Chatbot contra los endpoints propuestos. Sin ella, la sección aparece como no disponible. |
+| `VITE_CONVERSATIONS_API_URL` | Opcional. URL del historial si no es la misma que `VITE_API_URL`. |
+
+Reiniciar `npm run dev` después de cambiar el `.env`.
+
+## Qué consume de la API
+
+`src/infrastructure/http/repositories/HttpTurnoRepository.ts` implementa el
+puerto `TurnoRepository` contra `docs/contracts/openapi.yaml` del repositorio
+AgroFlow:
+
+| Acción del dashboard                                              | Operación                                    |
+| ----------------------------------------------------------------- | -------------------------------------------- |
+| Alta manual (teléfono, patente, código de finca, corte, carga)    | `POST /api/v1/appointments`                  |
+| Cola, filtros de estado/fecha/patente/teléfono y polling cada 4 s | `GET /api/v1/appointments`                   |
+| Detalle (clic en una fila)                                        | `GET /api/v1/appointments/{id}`              |
+| Avanzar / Cancelar                                                | `POST /api/v1/appointments/{id}/transitions` |
+
+El dashboard no calcula prioridad, ventana ni capacidad. Ante un error
+(`400`, `404`, `409`, `500` o sin conexión) muestra el mensaje y recarga el
+estado vigente.
+
+### Estado de cada sección
+
+| Sección | Fuente |
+|---|---|
+| Panel general | Turnos de la API: contadores del día y camiones en curso. |
+| Cola de turnos | Turnos de la API. |
+| Chatbot WhatsApp | No disponible, salvo con `VITE_CONVERSATIONS_SOURCE=http`. |
+| Transportistas, Reportes, Configuración | No disponibles: `openapi.yaml` no tiene endpoints para estos datos. Aparecen atenuadas en el menú. |
+
+Cuando el contrato incorpore una de estas capacidades, se agrega su repositorio
+HTTP en `infrastructure/http/`, se conecta en `composition/container.ts` y se
+reemplaza la vista "no disponible".
+
+### Historial de conversaciones (propuesta, no contrato)
+
+`HttpConversacionRepository` sigue los endpoints **propuestos** en
+[AgroFlow#88](https://github.com/agustinvallante/AgroFlow/pull/88), que todavía
+no existen en `openapi.yaml`:
+
+- `GET /api/v1/conversations?cursor=…&limit=…`
+- `GET /api/v1/conversations/{id}/events?cursor=…&limit=…`
+
+Los supuestos sobre forma de las páginas y orden están documentados en
+`src/infrastructure/http/dto/ConversationDto.ts`. Si el contrato aprobado
+difiere, solo cambian ese archivo y `mappers/conversationMapper.ts`.
+
 ## Estructura de carpetas (Clean Architecture)
 
 ```
 src/
 ├── domain/                  → Entidades y contratos (puertos). No depende de nada.
-│   ├── entities/             Turno, Transportista, Conversacion, MetricasPanel, Reporte, Configuracion
-│   └── repositories/         Interfaces: TurnoRepository, TransportistaRepository, etc.
+│   ├── entities/             Turno, Conversacion, Pagina
+│   └── repositories/         Interfaces: TurnoRepository, ConversacionRepository
 │
-├── application/              → Casos de uso. Orquestan reglas de negocio usando los puertos.
-│   └── usecases/              Uno por acción: ObtenerTurnosDelDia, CrearTurnoManual,
-│                               AlternarEstadoMolienda, ObtenerReporte, etc.
+├── application/              → Casos de uso. Orquestan usando los puertos.
+│   └── usecases/              ObtenerTurnosDelDia, CrearTurnoManual, AvanzarEstadoTurno,
+│                               ObtenerConversaciones, ObtenerMensajesConversacion, etc.
 │
-├── infrastructure/            → Implementaciones concretas de los puertos.
-│   └── mock/                  Hoy: repositorios en memoria (sin backend).
-│       ├── data/               Datos semilla (fincas, choferes, turnos, etc).
-│       └── repositories/       MockTurnoRepository, MockTransportistaRepository, etc.
-│                               Mañana: acá se agregaría infrastructure/http/
-│                               con HttpTurnoRepository, HttpTransportistaRepository...
-│                               implementando las MISMAS interfaces de domain/repositories.
+├── infrastructure/
+│   └── http/                  Implementaciones contra AgroFlow API.
+│       ├── ApiClient.ts         URL base y traducción de errores (problem+json)
+│       ├── dto/                 Formas de la API (AppointmentDto, ConversationDto)
+│       ├── mappers/             DTO ↔ entidades de dominio
+│       └── repositories/        HttpTurnoRepository, HttpConversacionRepository
 │
 ├── composition/
 │   └── container.ts           Raíz de composición: ÚNICO archivo que decide qué
-│                               implementación de cada repositorio se usa. Es el
-│                               punto donde se conectaría el backend real.
+│                               implementación se usa y qué secciones tienen datos.
 │
 ├── presentation/               → React. Todo lo visual.
 │   ├── layout/                 Sidebar, definición de vistas
-│   ├── views/                  Una por sección: PanelGeneralView, ColaTurnosView,
-│                                ChatbotView, TransportistasView, ReportesView,
-│                                ConfiguracionView
-│   ├── components/             Piezas reutilizables (badges, tablas, gráficos, etc)
-│   ├── hooks/                  usePanel, useColaTurnos, useTransportistas, useChatbot,
-│                                useReportes, useConfiguracion — conectan React con
-│                                los casos de uso a través del container
+│   ├── views/                  Una por sección del menú
+│   ├── components/             Piezas reutilizables (badges, estados, chat, etc)
+│   ├── hooks/                  useColaTurnos, useChatbot, useClock
 │   └── styles/                 Tokens de diseño (variables CSS) y hoja global
 │
 └── shared/
-    └── utils/                  Utilidades sin lógica de negocio (fechas, delay, ids)
+    └── utils/                  Utilidades sin lógica de negocio (fechas)
 ```
 
 ## La regla de dependencia
@@ -63,51 +139,13 @@ src/
 presentation  →  application  →  domain  ←  infrastructure
 ```
 
-- `domain` no importa nada de las otras capas: son las reglas del negocio y los
+- `domain` no importa nada de las otras capas: son las entidades y los
   contratos (interfaces) puros.
 - `application` (casos de uso) sólo conoce las interfaces de `domain`, nunca una
   implementación concreta.
-- `infrastructure` implementa esas interfaces (hoy con mocks en memoria).
+- `infrastructure` implementa esas interfaces contra AgroFlow API.
 - `presentation` (componentes y hooks de React) sólo llama a los casos de uso
-  a través de `composition/container.ts`; no sabe si los datos vienen de un
-  mock o de una API real.
-
-## Integración para la demo local
-
-La integración mínima con AgroFlow API está definida en
-[`docs/LOCAL_DEMO_INTEGRATION.md`](docs/LOCAL_DEMO_INTEGRATION.md). Para el lunes
-se conserva React/Vite y se conecta únicamente el flujo de turnos; autenticación,
-CRUD de datos maestros, interrupciones, mapa, reportes y despliegue quedan fuera.
-
-### Configuración
-
-Copiar `.env.example` como `.env` y elegir la fuente de datos:
-
-```env
-VITE_DATA_SOURCE=http          # mock = respaldo en memoria, sin backend
-VITE_API_URL=http://localhost:5000
-```
-
-Reiniciar `npm run dev` después de cambiar el `.env`.
-
-### Qué consume de la API (`VITE_DATA_SOURCE=http`)
-
-`src/infrastructure/http/repositories/HttpTurnoRepository.ts` implementa el
-puerto `TurnoRepository` contra `docs/contracts/openapi.yaml` del repositorio
-AgroFlow:
-
-| Acción del dashboard | Operación |
-|---|---|
-| Alta manual (teléfono, patente, código de finca, corte, carga) | `POST /api/v1/appointments` |
-| Cola, filtros de estado/fecha/patente/teléfono y polling cada 4 s | `GET /api/v1/appointments` |
-| Detalle (clic en una fila) | `GET /api/v1/appointments/{id}` |
-| Avanzar / Cancelar | `POST /api/v1/appointments/{id}/transitions` |
-
-El dashboard no calcula prioridad, ventana ni capacidad. Ante un error
-(`400`, `404`, `409`, `500` o sin conexión) muestra el mensaje y recarga el
-estado vigente. Panel general (métricas, timeline, molienda), chatbot,
-transportistas, reportes y configuración siguen en mock y se identifican como
-datos de demostración.
+  a través de `composition/container.ts`.
 
 ## Convenciones de la UI
 
@@ -115,5 +153,7 @@ datos de demostración.
   `src/presentation/styles/tokens.css` (paleta agroindustrial: verde caña,
   ámbar azúcar, papel crema) y la tipografía Fraunces (títulos) + IBM Plex
   Sans/Mono (datos).
-- Cada vista tiene su propio hook en `presentation/hooks/`, que centraliza el
-  estado de carga, error y las acciones (crear, reasignar, cancelar, etc).
+- Cada vista con datos tiene su hook en `presentation/hooks/`, que centraliza
+  el estado de carga, error y las acciones (crear, avanzar, cancelar).
+- Nunca se muestran datos de ejemplo: una sección sin endpoint usa
+  `SeccionNoDisponible`.
