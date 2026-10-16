@@ -98,6 +98,9 @@ nav {
   background: var(--cana-700);
   color: var(--tinta);
 }
+.nav-item.sin-datos:not(.active) {
+  opacity: 0.5;
+}
 .nav-item .dot {
   width: 6px;
   height: 6px;

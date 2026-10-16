@@ -2,6 +2,16 @@ import { VISTAS, type VistaId } from "./vistas";
 import logo from "../../assets/logo.png";
 import { container } from "../../composition/container";
 
+/** Vistas cuyos datos expone hoy la API; el resto queda atenuado. */
+const CON_DATOS: Record<VistaId, boolean> = {
+  general: true,
+  cola: true,
+  chatbot: false,
+  transportistas: false,
+  reportes: false,
+  config: false,
+};
+
 interface SidebarProps {
   vistaActiva: VistaId;
   onCambiarVista: (vista: VistaId) => void;
@@ -15,17 +25,15 @@ export function Sidebar({ vistaActiva, onCambiarVista }: SidebarProps) {
           <img src={logo} alt="AgroFlow" width={200} height={38} />
         </div>
         <div className="brand-sub">Control de Playa</div>
-        <select className="ingenio-select" defaultValue="san-ramon">
-          <option value="san-ramon">Ingenio San Ramón — Tucumán</option>
-        </select>
       </div>
 
       <nav>
         {VISTAS.map((vista) => (
           <div
             key={vista.id}
-            className={`nav-item ${vista.id === vistaActiva ? "active" : ""}`}
+            className={`nav-item ${vista.id === vistaActiva ? "active" : ""} ${CON_DATOS[vista.id] ? "" : "sin-datos"}`}
             onClick={() => onCambiarVista(vista.id)}
+            title={CON_DATOS[vista.id] ? undefined : "Sin datos en la API"}
           >
             {vista.id === vistaActiva && <span className="dot" />}
             {vista.label}
@@ -34,19 +42,7 @@ export function Sidebar({ vistaActiva, onCambiarVista }: SidebarProps) {
       </nav>
 
       <div className="sidebar-foot">
-        Sesión: María Costas
-        <br />
-        Jefa de Báscula · Turno mañana
-        <br />
-        {container.fuenteDatos === "http" ? (
-          <>
-            Turnos: AgroFlow API · {container.apiUrl}
-            <br />
-            Resto de las vistas: datos de demostración
-          </>
-        ) : (
-          "v0.4 prototipo · datos mock"
-        )}
+        AgroFlow API · {container.apiUrl}
       </div>
     </aside>
   );
